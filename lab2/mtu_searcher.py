@@ -9,18 +9,18 @@ import ipaddress
 
 destination = os.getenv("DESTINATION_ADDRESS")
 timout = os.getenv("TIMEOUT")
-max_mtu = os.getenv("MAX_MTU")
-if max_mtu is None:
-    max_mtu = '10000'
+max_msg_sz = os.getenv("MAX_MTU")
+if max_msg_sz is None:
+    max_msg_sz = '10000'
 
 if destination is None or \
     (timout is not None and not timout.isdigit()) or \
-        (max_mtu is not None and not max_mtu.isdigit()):
+        (max_msg_sz is not None and not max_msg_sz.isdigit()):
     print(destination, timout)
     print("Wait run as sudo docker run -e DESTINATION_ADDRESS='destination ip / public domain name' [-e TIMEOUT='timeout in ms'] [-e MAX_MTU='max boarder of searching default 10000'] mtu_search")
     exit(0)
 else:
-    max_mtu = int(max_mtu)
+    max_msg_sz = int(max_msg_sz)
 
 is_valid_ip = False
 is_valid_domain = False
@@ -63,7 +63,8 @@ if not is_ping_work:
     exit(1)
 
 L = -1
-R = max_mtu + 1
+R = max_msg_sz + 1
+real_mtu = None
 while L + 1 < R:
     mess_sz = (L + R) // 2
     print('try mtu=%d' % mess_sz)
@@ -73,6 +74,12 @@ while L + 1 < R:
     command.append(destination)
     try:
         response = subprocess.run(command, capture_output=True)
+        stdout = response.stdout.decode()
+        try_to_find = f'{mess_sz}('
+
+        real_sz = stdout[stdout.find(try_to_find):]
+        real_sz = real_sz[len(try_to_find):real_sz.find(')')]
+
         if response.returncode != 0:
             if 'too long' in response.stderr.decode():
                 R = mess_sz
@@ -85,12 +92,13 @@ while L + 1 < R:
                 R = mess_sz
         else:
             L = mess_sz
+            real_mtu = real_sz
     except Exception:
         R = mess_sz
         print("Smth went wrong. Try to erase msg size:", response)
 
-if L == -1:
+if real_mtu is None:
     print("host is unreachable")
 else:
-    print('mtu size is', L)
+    print('mtu size is', real_mtu)
     

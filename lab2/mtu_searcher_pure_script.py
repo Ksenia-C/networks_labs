@@ -7,7 +7,7 @@ import ipaddress
 
 
 if len(sys.argv) < 1:
-    print("Wait input as mtu_searcher.py {destination ip / public domain name} [timeout in ms]")
+    print("Wait input as mtu_searcher.py {destination ip / public domain name} [timeout in ms] [max message size]")
     exit(0)
 
 destination = sys.argv[1]
@@ -15,9 +15,9 @@ timout = None
 if len(sys.argv) > 2:
     timout = float(sys.argv[2])
 
-max_mtu = 10000
+max_msg_size = 10000
 if len(sys.argv) > 3:
-    max_mtu = int(sys.argv[3])
+    max_msg_size = int(sys.argv[3])
 
 is_valid_ip = False
 is_valid_domain = False
@@ -60,7 +60,8 @@ if not is_ping_work:
     exit(1)
 
 L = -1
-R = max_mtu + 1
+R = max_msg_size + 1
+real_mtu = None
 while L + 1 < R:
     mess_sz = (L + R) // 2
     print('try mtu=%d' % mess_sz)
@@ -70,6 +71,12 @@ while L + 1 < R:
     command.append(destination)
     try:
         response = subprocess.run(command, capture_output=True)
+        stdout = response.stdout.decode()
+        try_to_find = f'{mess_sz}('
+
+        real_sz = stdout[stdout.find(try_to_find):]
+        real_sz = real_sz[len(try_to_find):real_sz.find(')')]
+
         if response.returncode != 0:
             if 'too long' in response.stderr.decode():
                 R = mess_sz
@@ -82,11 +89,12 @@ while L + 1 < R:
                 R = mess_sz
         else:
             L = mess_sz
+            real_mtu = real_sz
     except Exception:
         R = mess_sz
         print("Smth went wrong. Try to erase msg size:", response)
 
-if L == -1:
+if real_mtu is None:
     print("host is unreachable")
 else:
-    print('mtu size is', L)
+    print('mtu size is', real_mtu)
